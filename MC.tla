@@ -2,8 +2,12 @@
 
 EXTENDS Apalache
 
-Servers == {"s1", "s2", "s3", "s4", "s5"}
-MaxTerm == 4
+\* Servers == {"s1", "s2", "s3", "s4", "s5"}
+Servers == { "s1", "s2", "s3" }
+
+MaxTerm == 3
+
+MaxLogSize == 2
 
 VARIABLES
     \* @type: Str -> Str;
@@ -17,7 +21,16 @@ VARIABLES
     logs,
 
     \* @type: Set($raftMsg);
-    msgs
+    msgs,
+
+    \* @type: Str -> Str -> Int;
+    nextIndex,
+
+    \* @type: Str -> Str -> Int;
+    matchIndex,
+
+    \* @type: Str -> Int;
+    commitIndex
 
 INSTANCE Raft
 
