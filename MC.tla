@@ -5,7 +5,7 @@ EXTENDS Apalache
 \* Servers == {"s1", "s2", "s3", "s4", "s5"}
 Servers == { "s1", "s2", "s3" }
 
-MaxTerm == 3
+MaxTerm == 1
 
 MaxLogSize == 2
 

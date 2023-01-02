@@ -48,6 +48,7 @@ Raft_typedefs == TRUE
 
 
 MajorSize == Cardinality(Servers) \div 2 + 1
+\* MajorSize == Cardinality(Servers) \div 2
 
 VARIABLES
     \* @type: Str -> Str;
@@ -165,7 +166,7 @@ BecomeLeader(s) ==
        peers == { m.src : m \in voteResps } \union {s}
      IN
        \* /\ \E quorum \in Majority: quorum \subseteq peers
-	   /\ Cardinality(peers) >= Cardinality(Servers) \div 2 + 1
+	   /\ Cardinality(peers) >= MajorSize
 	   /\ role' = [ role EXCEPT ![s] = Leader ]
 	   /\ nextIndex' = [ nextIndex EXCEPT ![s] = [ p \in Servers |-> Len(logs[s]) + 1 ] ]
 	   /\ matchIndex' = [ matchIndex EXCEPT ![s] = [ p \in Servers |-> 1 ] ]
@@ -210,8 +211,10 @@ IsLogMatch(s, m) ==
   /\ m.prevLogTerm = logs[s][m.prevLogIndex]
 
 \* @type: (Int, Int) => Int;
-Min(a, b) ==
-  IF a < b THEN a ELSE b
+Min(a, b) == IF a < b THEN a ELSE b
+
+\* @type: (Int, Int) => Int;
+Max(a, b) == IF a > b THEN a ELSE b
 
 FollowerAppendEntry(s) ==
   /\ role[s] = Follower
@@ -241,6 +244,7 @@ FollowerAppendEntry(s) ==
                            /\ newLog # SubSeq(logs[s], 1, Len(newLog))
               updateLog == appendNew \/ truncated
               newCommitIndex == Min(Len(newLog), m.leaderCommit)
+              \* newCommitIndex == Max(Min(Len(newLog), m.leaderCommit), m.leaderCommit)
             IN
               /\ accResp \notin msgs
               /\ commitIndex' = [ commitIndex EXCEPT ![s] = newCommitIndex ]
@@ -325,6 +329,7 @@ Next ==
   \/ \E s \in Servers: ClientReq(s)
   \/ \E s \in Servers: LeaderAppendEntry(s)
   \/ \E s \in Servers: FollowerAppendEntry(s)
+  \/ \E s \in Servers: HandleAppendResp(s)
   \/ \E s \in Servers: LeaderCommit(s)
 
 \* invariants
@@ -344,8 +349,42 @@ CommitIndexMonoIncr == \A s \in Servers: commitIndex'[s] >= commitIndex[s]
 
 NeverCommit == \A s \in Servers: commitIndex[s] <= 1
 
-Inv ==
-  /\ NeverCommit
+LogReplicated ==
+  \E s1, s2 \in Servers:
+    /\ s1 # s2
+    /\ Len(logs[s1]) >= 2
+    /\ Len(logs[s2]) >= 2
+    /\ logs[s1][2] = logs[s2][2]
+
+SomeMatchIndexUpdated ==
+  \E s \in Servers:
+    /\ role[s] = Leader
+    /\ \E p \in Servers\{s}: matchIndex[s][p] > 1
+
+AppRcved ==
+  \E m \in msgs:
+    /\ m.mType = AppendResp
+    /\ role[m.dst] = Leader
+    /\ currentTerm[m.dst] = m.term
+    /\ m.succ = TRUE
+    /\ m.prevLogIndex > 1
+    /\ m.prevLogIndex > matchIndex[m.dst][m.src]
+
+FollowerCanCommit ==
+  \E l, f \in Servers:
+    /\ l # f
+    /\ role[l] = Leader
+    /\ role[f] = Follower
+    /\ commitIndex[l] > 1
+    /\ commitIndex[f] > 1
+Inv == 
+  /\ ~FollowerCanCommit
+  \* /\ ~AppRcved
+  \* /\ ~SomeMatchIndexUpdated
+  \* ~LogReplicated
+  \* /\ \A s \in Servers: Len(logs[s]) < MaxLogSize
+  \* /\ \A s \in Servers: currentTerm[s] < 3
+  \* /\ NeverCommit
   \* /\ CommitIndexMonoIncr
   \* /\ NoSplitBrain
   \* /\ NoLeaderElected
